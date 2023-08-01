@@ -1,5 +1,3 @@
-use std::error::Error;
-
 #[cfg(target_family = "wasm")]
 use wasm_bindgen::prelude::*;
 use winit::event::{Event, WindowEvent};

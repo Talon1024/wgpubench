@@ -41,7 +41,7 @@ pub struct AppState {
     square_pipeline: SquarePipeline,
     square_uniforms: SquareUniforms,
     square_instances: Vec<SquareInstance>,
-    square_instance_count: usize,
+    square_instance_count: u32,
     square_instance_buffer: Buffer,
 }
 
@@ -69,7 +69,7 @@ impl AppState {
             pos: Vec2::new(0.0, 0.0),
             hue: 0.125,
         }];
-        let square_instance_count = square_instances.len();
+        let square_instance_count = square_instances.len() as u32;
         let square_instance_data: Vec<_> = square_instances.iter().copied().map(SquareInstanceRaw::from).collect();
         let square_instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Square instance buffer"),
@@ -99,13 +99,13 @@ impl AppState {
     pub fn render(&self) -> Result<(), Box<dyn Error>> {
         // Get the output texture to render to
         let canvas = self.surface_info.get_current_texture()?;
+        let canvas_view = SimpleTextureView::new(&canvas.texture, Some("Surface view"));
         let mut commands = self
             .device
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("My commands"),
             });
         {
-            let canvas_view = SimpleTextureView::new(&canvas.texture, None);
             let mut render_pass = commands.begin_render_pass(&RenderPassDescriptor {
                 label: Some("My render pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
@@ -130,12 +130,15 @@ impl AppState {
                     stencil_ops: None,
                 }),
             });
+            render_pass.set_pipeline(&self.square_pipeline);
             render_pass.set_vertex_buffer(0, self.square_instance_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.square_pipeline.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.square_pipeline.index_buffer.slice(..), IndexFormat::Uint16);
-            render_pass.set_pipeline(&self.square_pipeline);
             render_pass.set_bind_group(0, &self.square_pipeline.bind_group, &[]);
-            render_pass.draw_indexed(0..4, 0, 0..1)
+            render_pass.draw_indexed(
+                0..crate::square::SQUARE_INDX.len() as u32,
+                0,
+                0..self.square_instance_count);
         }
         self.queue.submit([commands.finish()]);
         canvas.present();

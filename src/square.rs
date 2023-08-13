@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
-use wgpu::{Device, RenderPipelineDescriptor, RenderPipeline, PipelineLayoutDescriptor, VertexState, ShaderModule, ShaderModuleDescriptor, VertexBufferLayout, VertexStepMode, BufferAddress, PrimitiveState, DepthStencilState, MultisampleState, FragmentState, ColorTargetState, BlendComponent, ColorWrites, TextureFormat, BlendFactor, BlendOperation, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupEntry, BufferDescriptor, BufferUsages, util::{DeviceExt, BufferInitDescriptor}};
+use wgpu::{Device, RenderPipelineDescriptor, RenderPipeline, PipelineLayoutDescriptor, VertexState, ShaderModule, ShaderModuleDescriptor, VertexBufferLayout, VertexStepMode, BufferAddress, PrimitiveState, DepthStencilState, MultisampleState, FragmentState, ColorTargetState, TextureFormat, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupEntry, BufferDescriptor, BufferUsages, util::{DeviceExt, BufferInitDescriptor}};
 use std::{error::Error, borrow::Cow, mem, ops::Deref};
 
 use crate::platform;
@@ -29,8 +29,7 @@ const SQUARE_GEOM: [SquareVertexRaw; 4] = [
 // |\ |
 // | \|
 // 3--2
-// Use PrimitiveTopology::TriangleStrip
-const SQUARE_INDX: [u16; 4] = [0, 1, 2, 3];
+pub const SQUARE_INDX: [u16; 4] = [0, 1, 2, 3];
 
 struct SquareVertex {
     relpos: Vec2,
@@ -180,15 +179,7 @@ impl SquarePipeline {
             fragment: Some(FragmentState {
                 module: &shader_module,
                 entry_point: "pixel_main",
-                targets: &[Some(ColorTargetState {
-                    format: cfmt,
-                    blend: Some(wgpu::BlendState { color: BlendComponent::OVER, alpha: BlendComponent {
-                        src_factor: BlendFactor::OneMinusDstAlpha,
-                        dst_factor: BlendFactor::OneMinusSrcAlpha,
-                        operation: BlendOperation::Add
-                    } }),
-                    write_mask: ColorWrites::ALL,
-                })],
+                targets: &[Some(ColorTargetState::from(cfmt))],
             }),
             multiview: None,
         });

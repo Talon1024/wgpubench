@@ -8,8 +8,7 @@
 <body>
 	<script type="module">
 		import init, {run} from "/pkg/wgpubench.js";
-		init("/pkg/wgpubench_bg.wasm").then(() => {
-		}).catch((err) => {
+		init("/pkg/wgpubench_bg.wasm").catch((err) => {
 			console.error(err);
 		});
 	</script>

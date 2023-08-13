@@ -10,6 +10,7 @@ mod app;
 use app::AppState;
 mod staged_buffer;
 mod util;
+pub(crate) mod platform;
 
 mod square;
 
@@ -37,6 +38,7 @@ pub async fn run() {
     let mut app = AppState::setup(window, elproxy)
         .await
         .expect("Could not set up app");
+    app.window.request_redraw();
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent { window_id, event } => {
             if window_id == primary_id {
@@ -45,6 +47,7 @@ pub async fn run() {
                         control_flow.set_exit_with_code(0);
                     }
                     WindowEvent::Resized(new_size) => {
+                        app.window.request_redraw();
                         app.resize(new_size);
                     }
                     _ => (),

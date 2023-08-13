@@ -9,6 +9,27 @@ pub struct SurfaceInfo {
     pub depth_texture_view: TextureView,
 }
 
+fn surface_texture_format() -> TextureFormat {
+    #[cfg(target_family="wasm")]
+    let format = TextureFormat::Rgba8UnormSrgb;
+    #[cfg(not(target_family="wasm"))]
+    let format = TextureFormat::Bgra8UnormSrgb;
+    format
+}
+
+fn surface_config_with_dims(width: u32, height: u32) -> SurfaceConfiguration {
+    let format = surface_texture_format();
+    SurfaceConfiguration {
+        usage: TextureUsages::RENDER_ATTACHMENT,
+        format,
+        width,
+        height,
+        present_mode: PresentMode::Fifo,
+        alpha_mode: CompositeAlphaMode::Opaque,
+        view_formats: vec![format],
+    }
+}
+
 impl SurfaceInfo {
     pub async fn create(
         instance: &Instance,
@@ -40,19 +61,7 @@ impl SurfaceInfo {
             )
             .await?;
         // wasm and native support different surface texture formats
-        #[cfg(target_family="wasm")]
-        let surface_format = TextureFormat::Rgba8UnormSrgb;
-        #[cfg(not(target_family="wasm"))]
-        let surface_format = TextureFormat::Bgra8UnormSrgb;
-        let config = SurfaceConfiguration {
-            usage: TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width,
-            height,
-            present_mode: PresentMode::Fifo,
-            alpha_mode: CompositeAlphaMode::Opaque,
-            view_formats: vec![surface_format],
-        };
+        let config = surface_config_with_dims(width, height);
         surface.configure(&device, &config);
         // The depth texture is the same size as the surface
         let depth_texture = device.create_texture(&TextureDescriptor {
@@ -92,6 +101,8 @@ impl SurfaceInfo {
     }
     pub fn resize(&mut self, device: &Device, new_size: PhysicalSize<u32>) {
         let PhysicalSize { width, height } = new_size;
+        let config = surface_config_with_dims(width, height);
+        self.surface.configure(device, &config);
         self.depth_texture = device.create_texture(&TextureDescriptor {
             label: Some("My depth texture"),
             size: Extent3d {
@@ -116,6 +127,9 @@ impl SurfaceInfo {
             base_array_layer: 0,
             array_layer_count: None,
         });
+    }
+    pub fn format(&self) -> TextureFormat {
+        surface_texture_format()
     }
 }
 

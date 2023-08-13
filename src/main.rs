@@ -1,3 +1,5 @@
+use futures::executor;
+
 fn main() {
-    pollster::block_on(wgpubench::run());
+    executor::block_on(wgpubench::run());
 }

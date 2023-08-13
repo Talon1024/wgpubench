@@ -9,16 +9,19 @@ crate-type = ["cdylib", "rlib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pollster = "0.3.0"
+glam = "0.24.1"
 raw-window-handle = "0.5.2"
 wgpu = "0.17.0"
 winit = "0.28.6"
+futures = "0.3.28"
+bytemuck = { version = "1.13.1", features = ["derive"] }
 
 [target.'cfg(target_family="wasm")'.dependencies]
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
 web-sys = "0.3.64"
 console_error_panic_hook = "0.1.7"
+gloo = {version = "0.9.0", default-features = false, features = ["net"]}
 
 [target.'cfg(target_family="wasm")'.dependencies.wgpu]
 version = "0.17.0"

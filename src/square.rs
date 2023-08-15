@@ -1,28 +1,35 @@
 use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
-use wgpu::{Device, RenderPipelineDescriptor, RenderPipeline, PipelineLayoutDescriptor, VertexState, ShaderModule, ShaderModuleDescriptor, VertexBufferLayout, VertexStepMode, BufferAddress, PrimitiveState, DepthStencilState, MultisampleState, FragmentState, ColorTargetState, TextureFormat, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupEntry, BufferDescriptor, BufferUsages, util::{DeviceExt, BufferInitDescriptor}};
-use std::{error::Error, borrow::Cow, mem, ops::Deref};
+use std::{borrow::Cow, error::Error, mem, ops::Deref};
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+    BufferAddress, BufferDescriptor, BufferUsages, ColorTargetState, DepthStencilState, Device,
+    FragmentState, MultisampleState, PipelineLayoutDescriptor, PrimitiveState, RenderPipeline,
+    RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderStages,
+    TextureFormat, VertexBufferLayout, VertexState, VertexStepMode, BlendState, ColorWrites,
+};
 
-use crate::platform;
+use crate::{platform, util::texture::Texture};
 
 pub const SQUARE_SIZE: f32 = 8.0; // pixels
 
 const SQUARE_GEOM: [SquareVertexRaw; 4] = [
     SquareVertexRaw::const_from(SquareVertex {
         relpos: Vec2::new(1.0 / 2., 1.0 / 2.),
-        uv: Vec2::new(1.0, 1.0),
+        uv: Vec2::new(1.0, 0.0),
     }),
     SquareVertexRaw::const_from(SquareVertex {
         relpos: Vec2::new(-1.0 / 2., 1.0 / 2.),
-        uv: Vec2::new(-1.0, 1.0),
+        uv: Vec2::new(0.0, 0.0),
     }),
     SquareVertexRaw::const_from(SquareVertex {
         relpos: Vec2::new(1.0 / 2., -1.0 / 2.),
-        uv: Vec2::new(1.0, -1.0),
+        uv: Vec2::new(1.0, 1.0),
     }),
     SquareVertexRaw::const_from(SquareVertex {
         relpos: Vec2::new(-1.0 / 2., -1.0 / 2.),
-        uv: Vec2::new(-1.0, -1.0),
+        uv: Vec2::new(0.0, 1.0),
     }),
 ];
 // 1--0
@@ -38,17 +45,23 @@ struct SquareVertex {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
-pub struct SquareVertexRaw { pos_uv: [f32; 4] }
+pub struct SquareVertexRaw {
+    pos_uv: [f32; 4],
+}
 
 impl SquareVertexRaw {
     const fn const_from(value: SquareVertex) -> Self {
-        Self { pos_uv: [value.relpos.x, value.relpos.y, value.uv.x, value.uv.y] }
+        Self {
+            pos_uv: [value.relpos.x, value.relpos.y, value.uv.x, value.uv.y],
+        }
     }
 }
 
 impl From<SquareVertex> for SquareVertexRaw {
     fn from(value: SquareVertex) -> Self {
-        Self { pos_uv: [value.relpos.x, value.relpos.y, value.uv.x, value.uv.y] }
+        Self {
+            pos_uv: [value.relpos.x, value.relpos.y, value.uv.x, value.uv.y],
+        }
     }
 }
 
@@ -60,25 +73,26 @@ pub struct SquareInstance {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
-pub struct SquareInstanceRaw { pos_hue: [f32; 3] }
+pub struct SquareInstanceRaw {
+    pos_hue: [f32; 3],
+}
 
 impl From<SquareInstance> for SquareInstanceRaw {
     fn from(value: SquareInstance) -> Self {
-        Self { pos_hue: [value.pos.x, value.pos.y, value.hue] }
+        Self {
+            pos_hue: [value.pos.x, value.pos.y, value.hue],
+        }
     }
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct SquareUniforms {
-    pub screen_size: [u32; 2]
+    pub screen_size: [u32; 2],
 }
 
 pub struct SquarePipeline {
-    shader_module: ShaderModule,
-    pipeline: RenderPipeline,
-    pipeline_layout: wgpu::PipelineLayout,
-    bind_group_layout: wgpu::BindGroupLayout,
+    pub pipeline: RenderPipeline,
     pub uniform_buffer: wgpu::Buffer,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -86,26 +100,42 @@ pub struct SquarePipeline {
 }
 
 impl SquarePipeline {
-    pub async fn new(device: &Device, cfmt: TextureFormat) -> Result<Self, Box<dyn Error>> {
-        let shader_code = Cow::from(
-            platform::read_text_asset("assets/square.wgsl").await?
-        );
+    pub async fn new(device: &Device, texture: &Texture, surffmt: TextureFormat) -> Result<Self, Box<dyn Error>> {
+        let shader_code = Cow::from(platform::read_text_asset("assets/square.wgsl").await?);
         let shader_module = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Square shader module"),
             source: wgpu::ShaderSource::Wgsl(shader_code),
         });
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Square uniforms (layout)"),
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("Square uniform buffer"),
@@ -126,10 +156,20 @@ impl SquarePipeline {
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Square uniforms"),
             layout: &bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                },
+            ],
         });
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Pipeline for rendering a textured square (layout)"),
@@ -146,13 +186,13 @@ impl SquarePipeline {
                     VertexBufferLayout {
                         array_stride: mem::size_of::<SquareInstanceRaw>() as BufferAddress,
                         step_mode: VertexStepMode::Instance,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x4],
                     },
                     VertexBufferLayout {
                         array_stride: mem::size_of::<SquareVertexRaw>() as BufferAddress,
                         step_mode: VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![1 => Float32x4]
-                    }
+                        attributes: &wgpu::vertex_attr_array![1 => Float32x4],
+                    },
                 ],
             },
             primitive: PrimitiveState {
@@ -179,11 +219,21 @@ impl SquarePipeline {
             fragment: Some(FragmentState {
                 module: &shader_module,
                 entry_point: "pixel_main",
-                targets: &[Some(ColorTargetState::from(cfmt))],
+                targets: &[Some(ColorTargetState {
+                    format: surffmt,
+                    blend: Some(BlendState::ALPHA_BLENDING),
+                    write_mask: ColorWrites::ALL,
+                })],
             }),
             multiview: None,
         });
-        Ok(SquarePipeline { pipeline, pipeline_layout, shader_module, bind_group_layout, bind_group, uniform_buffer, vertex_buffer, index_buffer })
+        Ok(SquarePipeline {
+            pipeline,
+            bind_group,
+            uniform_buffer,
+            vertex_buffer,
+            index_buffer,
+        })
     }
 }
 

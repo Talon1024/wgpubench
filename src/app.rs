@@ -62,12 +62,17 @@ impl AppState {
         web_sys::console::log_1(&JsValue::from_str(&backend));
 
         let screen_size = window.inner_size();
-        let square_pipeline = SquarePipeline::new(&device, surface_info.format()).await?;
+        let flare_texture = crate::util::texture::Texture::load_asset(
+            &device, &queue, "assets/redflare2.png", None).await?;
+        let square_pipeline = SquarePipeline::new(&device, &flare_texture, surface_info.format()).await?;
         let square_uniforms = SquareUniforms { screen_size: [screen_size.width, screen_size.height] };
         queue.write_buffer(&square_pipeline.uniform_buffer, 0, bytemuck::cast_slice(&[square_uniforms]));
         let square_instances = vec![SquareInstance {
-            pos: Vec2::new(0.0, 0.0),
-            hue: 0.125,
+            pos: Vec2::new(0.0625, 0.0625),
+            hue: std::f32::consts::PI,
+        }, SquareInstance {
+            pos: Vec2::new(-0.0625, -0.0625),
+            hue: 0.0,
         }];
         let square_instance_count = square_instances.len() as u32;
         let square_instance_data: Vec<_> = square_instances.iter().copied().map(SquareInstanceRaw::from).collect();

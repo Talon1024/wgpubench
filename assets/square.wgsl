@@ -13,15 +13,17 @@ const PI: f32 = 3.14159265358979323846;
 
 @vertex
 fn vertex_main(
-    @location(0) inst_pos_hue: vec3<f32>,
+    @location(0) inst_pos_hue: vec4<f32>,
     @location(1) vert_pos_uv: vec4<f32>
 ) -> VertexOutput {
     var gazouta: VertexOutput;
     let ipos = inst_pos_hue.xy;
     let hue = inst_pos_hue.z;
+    let index = bitcast<u32>(inst_pos_hue.w);
     let vpos = vert_pos_uv.xy;
     let vuv = vert_pos_uv.zw;
-    gazouta.position = vec4<f32>(vpos + ipos, 0.0, 1.0);
+    let depth = select(0.25, 0.125, index % 2u == 0u);
+    gazouta.position = vec4<f32>(vpos + ipos, depth, 1.0);
     gazouta.uv = vuv;
     gazouta.colour = 
         // From https://github.com/Talon1024/shader-shite/blob/master/hsl.frag

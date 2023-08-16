@@ -70,9 +70,11 @@ impl AppState {
         let square_instances = vec![SquareInstance {
             pos: Vec2::new(0.0625, 0.0625),
             hue: std::f32::consts::PI,
+            index: 0,
         }, SquareInstance {
             pos: Vec2::new(-0.0625, -0.0625),
             hue: 0.0,
+            index: 1,
         }];
         let square_instance_count = square_instances.len() as u32;
         let square_instance_data: Vec<_> = square_instances.iter().copied().map(SquareInstanceRaw::from).collect();

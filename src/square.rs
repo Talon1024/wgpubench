@@ -7,7 +7,7 @@ use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, ColorTargetState, DepthStencilState, Device,
     FragmentState, MultisampleState, PipelineLayoutDescriptor, PrimitiveState, RenderPipeline,
     RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderStages,
-    TextureFormat, VertexBufferLayout, VertexState, VertexStepMode, BlendState, ColorWrites,
+    TextureFormat, VertexBufferLayout, VertexState, VertexStepMode, BlendState, ColorWrites, VertexAttribute,
 };
 
 use crate::{platform, util::texture::Texture};
@@ -65,23 +65,40 @@ impl From<SquareVertex> for SquareVertexRaw {
     }
 }
 
+impl VertexAttributes for SquareVertexRaw {
+    fn vertex_attributes(start_index: u32) -> Box<[VertexAttribute]> {
+        Box::from(wgpu::vertex_attr_array![0 + start_index => Float32x4])
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct SquareInstance {
     pub pos: Vec2,
     pub hue: f32,
+    pub index: u32,
+}
+
+trait VertexAttributes {
+    fn vertex_attributes(start_index: u32) -> Box<[VertexAttribute]>;
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct SquareInstanceRaw {
-    pos_hue: [f32; 3],
+    pos_hue: [f32; 4],
 }
 
 impl From<SquareInstance> for SquareInstanceRaw {
     fn from(value: SquareInstance) -> Self {
         Self {
-            pos_hue: [value.pos.x, value.pos.y, value.hue],
+            pos_hue: [value.pos.x, value.pos.y, value.hue, f32::from_bits(value.index)],
         }
+    }
+}
+
+impl VertexAttributes for SquareInstanceRaw {
+    fn vertex_attributes(start_index: u32) -> Box<[VertexAttribute]> {
+        Box::from(wgpu::vertex_attr_array![0 + start_index => Float32x4])
     }
 }
 
@@ -186,12 +203,12 @@ impl SquarePipeline {
                     VertexBufferLayout {
                         array_stride: mem::size_of::<SquareInstanceRaw>() as BufferAddress,
                         step_mode: VertexStepMode::Instance,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x4],
+                        attributes: &SquareInstanceRaw::vertex_attributes(0),
                     },
                     VertexBufferLayout {
                         array_stride: mem::size_of::<SquareVertexRaw>() as BufferAddress,
                         step_mode: VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![1 => Float32x4],
+                        attributes: &SquareVertexRaw::vertex_attributes(1),
                     },
                 ],
             },
@@ -207,7 +224,7 @@ impl SquarePipeline {
             depth_stencil: Some(DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_compare: wgpu::CompareFunction::Always,
                 stencil: Default::default(),
                 bias: Default::default(),
             }),

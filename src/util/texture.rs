@@ -1,4 +1,4 @@
-use image::{DynamicImage, imageops::FilterType};
+use image::{DynamicImage, imageops::FilterType, ImageBuffer, Rgba};
 use wgpu::{TextureDescriptor, Extent3d, TextureFormat, TextureUsages, ImageCopyTexture, Origin3d, TextureAspect, ImageDataLayout};
 use std::{error::Error, borrow::{Cow, Borrow}};
 use crate::platform;
@@ -35,9 +35,26 @@ pub struct Texture {
 }
 
 macro_rules! conversion {
-    ($conversion_function: ident) => {
-        &|i| DynamicImage::from(DynamicImage::$conversion_function(i))
+    ($conversion_function: path) => {
+        &|i| DynamicImage::from($conversion_function(i))
     };
+}
+
+trait IntoRgba16Float {
+    fn into_rgba16f(image: DynamicImage) -> ImageBuffer<Rgba<u16>, Vec<u16>>;
+}
+
+impl IntoRgba16Float for DynamicImage {
+    fn into_rgba16f(image: DynamicImage) -> ImageBuffer<Rgba<u16>, Vec<u16>> {
+        let width = image.width();
+        let height = image.height();
+        let buf = image.into_rgba32f().into_vec().into_iter()
+            .map(half::f16::from_f32)
+            .map(half::f16::to_bits)
+            .collect();
+        let buf: ImageBuffer<Rgba<u16>, Vec<u16>> = ImageBuffer::from_vec(width, height, buf).unwrap();
+        buf
+    }
 }
 
 impl Texture {
@@ -49,24 +66,25 @@ impl Texture {
     pub fn from_image(device: &wgpu::Device, queue: &wgpu::Queue, image: DynamicImage, label: Option<&str>) -> Result<Self, Box<dyn Error>> {
         let width = image.width();
         let height = image.height();
-        // For now, the image has to be Rgba8UnormSrgb. wgpu doesn't implement
-        // float32-filterable, and image can't convert pixels to 16-bit float
-        let (format, conversion): (Result<TextureFormat, String>, Option<&dyn Fn(&DynamicImage) -> DynamicImage>) = match &image {
-            DynamicImage::ImageLuma8(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
-            DynamicImage::ImageLumaA8(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
-            DynamicImage::ImageRgb8(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
+        // For now, the image has to be Rgba8UnormSrgb or Rgba16Float.
+        // wgpu doesn't implement float32-filterable.
+        // The `half` crate is used to convert images to Rgba16Float.
+        let (format, conversion): (Result<TextureFormat, String>, Option<&dyn Fn(DynamicImage) -> DynamicImage>) = match &image {
+            DynamicImage::ImageLuma8(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(DynamicImage::into_rgba8))),
+            DynamicImage::ImageLumaA8(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(DynamicImage::into_rgba8))),
+            DynamicImage::ImageRgb8(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(DynamicImage::into_rgba8))),
             DynamicImage::ImageRgba8(_) => (Ok(TextureFormat::Rgba8UnormSrgb), None),
-            DynamicImage::ImageLuma16(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
-            DynamicImage::ImageLumaA16(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
-            DynamicImage::ImageRgb16(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
-            DynamicImage::ImageRgba16(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
-            DynamicImage::ImageRgb32F(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
-            DynamicImage::ImageRgba32F(_) => (Ok(TextureFormat::Rgba8UnormSrgb), Some(conversion!(to_rgba8))),
+            DynamicImage::ImageLuma16(_) => (Ok(TextureFormat::Rgba16Float), Some(conversion!(DynamicImage::into_rgba16f))),
+            DynamicImage::ImageLumaA16(_) => (Ok(TextureFormat::Rgba16Float), Some(conversion!(DynamicImage::into_rgba16f))),
+            DynamicImage::ImageRgb16(_) => (Ok(TextureFormat::Rgba16Float), Some(conversion!(DynamicImage::into_rgba16f))),
+            DynamicImage::ImageRgba16(_) => (Ok(TextureFormat::Rgba16Float), Some(conversion!(DynamicImage::into_rgba16f))),
+            DynamicImage::ImageRgb32F(_) => (Ok(TextureFormat::Rgba16Float), Some(conversion!(DynamicImage::into_rgba16f))),
+            DynamicImage::ImageRgba32F(_) => (Ok(TextureFormat::Rgba16Float), Some(conversion!(DynamicImage::into_rgba16f))),
             f => (Err(format!("Unknown/unsupported format {f:?}")), None),
         };
         let format = format?;
         let image = match conversion {
-            Some(f) => f(&image),
+            Some(f) => f(image),
             None => image,
         };
         let mip_level_count = MIP_LEVELS.max(1);
@@ -89,13 +107,13 @@ impl Texture {
             let nheight = height >> mip_level;
             let bytes_per_channel = match format {
                 TextureFormat::Rgba8UnormSrgb => 1,
-                TextureFormat::Rgba16Uint => 2,
+                TextureFormat::Rgba16Float => 2,
                 TextureFormat::Rgba32Float => 4,
                 _ => unreachable!()
             };
             let channels = match format {
                 TextureFormat::Rgba8UnormSrgb => 4,
-                TextureFormat::Rgba16Uint => 4,
+                TextureFormat::Rgba16Float => 4,
                 TextureFormat::Rgba32Float => 4,
                 _ => unreachable!()
             };
